@@ -4,7 +4,7 @@ Export an OpenSim model + IK motion (.osim + .mot) to an animated glTF (.glb).
 
 import numpy as np
 import pygltflib as gltf
-from utils import load_geometry
+from .utils import load_geometry
 
 # glTF component types / buffer targets.
 FLOAT = 5126

@@ -1,7 +1,7 @@
 import opensim as osim
 import numpy as np
 
-from utils import MeshMotion
+from .utils import MeshMotion
 
 
 def process_motion(
