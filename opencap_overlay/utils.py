@@ -4,6 +4,7 @@ import shutil
 import subprocess
 from dataclasses import dataclass, field
 from typing import Any
+from pathlib import Path
 
 import numpy as np
 import opensim as osim
@@ -21,6 +22,16 @@ class MeshMotion:
     frame: osim.PhysicalFrame
     translation: Any = field(default_factory=list)  # (T, 3) (xyz)
     rotation: Any = field(default_factory=list)  # (T, 4) (xyzw quat)
+
+
+def apply_custom_geometry_map(
+        mesh_file: str,
+        custom_geometry_map: dict[str, str]
+) -> str:
+    ext = Path(mesh_file).suffix
+    base_name = Path(mesh_file).stem
+    mapped_name = custom_geometry_map.get(base_name, base_name)
+    return f"{mapped_name}{ext}"
 
 
 def load_geometry(mesh_file, geometry_dir):

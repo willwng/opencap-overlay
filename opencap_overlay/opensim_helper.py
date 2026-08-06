@@ -1,17 +1,18 @@
 import opensim as osim
 import numpy as np
 
-from .utils import MeshMotion
+from .utils import MeshMotion, apply_custom_geometry_map
 
 
 def process_motion(
         model: osim.Model,
-        mot_path: str
+        mot_path: str,
+        custom_geometry_map: dict[str, str]
 ) -> tuple[np.ndarray, list[MeshMotion]]:
     state = model.initSystem()
     storage = osim.Storage(mot_path)
     if storage.isInDegrees():
-        storage.convertToRadians()  # rotational columns -> radians
+        model.getSimbodyEngine().convertDegreesToRadians(storage)
 
     labels = storage.getColumnLabels()
     label_idx = {labels.get(i): i - 1 for i in range(1, labels.getSize())}
@@ -38,9 +39,14 @@ def process_motion(
         if m is None:
             continue
         sf = m.get_scale_factors()
+
+        # Use custom geometry if provided
+        mesh_file = m.get_mesh_file()
+        mesh_file = apply_custom_geometry_map(mesh_file, custom_geometry_map)
+
         metas.append(MeshMotion(
             name=m.getName(),
-            mesh_file=m.get_mesh_file(),
+            mesh_file=mesh_file,
             scale=[sf.get(0), sf.get(1), sf.get(2)],
             frame=m.getFrame(),
         ))

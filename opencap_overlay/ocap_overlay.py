@@ -1,5 +1,6 @@
 import os
 from abc import ABC, abstractmethod
+from typing import Optional
 
 import opensim as osim
 
@@ -11,14 +12,23 @@ from .utils import frames_to_video, load_camera
 
 
 class OpenCapOverlayTool(ABC):
-    def __init__(self, model_path, mot_path, camera_path=None):
+    def __init__(
+            self,
+            model_path: str,
+            mot_path: str,
+            camera_path: Optional[str] = None,
+            custom_geometry_map: Optional[dict] = None
+    ):
         self.model_path = model_path
         self.mot_path = mot_path
         self.output_dir = None
+        self.custom_geometry_map = {} if custom_geometry_map is None else custom_geometry_map
 
         # Process the mesh motions
         model = osim.Model(self.model_path)
-        self.times, self.mesh_motions = process_motion(model, self.mot_path)
+        self.times, self.mesh_motions = process_motion(
+            model, self.mot_path, self.custom_geometry_map
+        )
         self.frames = len(self.times)
         print(f'Processed {self.frames} frames, {len(self.mesh_motions)} meshes')
 
