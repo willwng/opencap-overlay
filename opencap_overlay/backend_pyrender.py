@@ -1,7 +1,15 @@
 """ pyrender backend """
 import os
+from typing import Optional
 
 import numpy as np
+import cv2
+import pyrender
+import trimesh
+from PIL import Image
+
+from .camera import Camera
+from .utils import load_geometry, MeshMotion
 
 
 def _quat_to_mat(q):
@@ -19,10 +27,10 @@ def _quat_to_mat(q):
                      [xz - wy, yz + wx, 1 - (xx + yy)]])
 
 
-def _camera_pose(cal):
+def _camera_pose(camera: Camera):
     """Camera-to-world 4x4 (OpenGL convention) from an calibration dict """
-    R = np.asarray(cal['rotation'], dtype=float)  # world -> cam
-    t = np.asarray(cal['translation'], dtype=float).reshape(3) / 1000.0  # mm -> m
+    R = np.asarray(camera.rotation, dtype=float)  # world -> cam
+    t = np.asarray(camera.translation, dtype=float).reshape(3) / 1000.0  # mm -> m
     pose = np.eye(4)
     pose[:3, :3] = R.T @ np.diag([1.0, -1.0, -1.0])
     pose[:3, 3] = -R.T @ t
@@ -36,30 +44,42 @@ def _direction_pose(direction):
     z = -np.asarray(direction, dtype=float)
     z /= np.linalg.norm(z)
     up = np.array([0.0, 1.0, 0.0]) if abs(z[1]) < 0.99 else np.array([0.0, 0.0, 1.0])
-    x = np.cross(up, z); x /= np.linalg.norm(x)
+    x = np.cross(up, z)
+    x /= np.linalg.norm(x)
     y = np.cross(z, x)
     pose = np.eye(4)
     pose[:3, 0], pose[:3, 1], pose[:3, 2] = x, y, z
     return pose
 
 
-def render_pyrender(mesh_motions, geometry_dir, camera, frames_dir, num_frames):
-    """Render every frame of the motion to frames_dir/frame_XXXX.png with pyrender."""
-    import pyrender
-    import trimesh
-    from PIL import Image
+def render_pyrender(
+        mesh_motions: list[MeshMotion],
+        geometry_dir: str,
+        camera: Camera,
+        frames_dir: str,
+        num_frames: int,
+        motion_times,
+        background_video: Optional[str] = None,
+        opacity: float = 1.0
+):
+    """Render the motion to frames_dir/frame_XXXX.png with pyrender.
 
-    from .utils import load_geometry
-
+    Returns (frames_dir, out_fps). motion_times are the motion's absolute
+    timestamps (seconds), shared with the video clock. When compositing over a
+    video, the model is placed at each frame's wall-clock time: video-only before
+    the motion's first timestamp, the last pose held after its last, so both play
+    at true speed. Without a video the motion plays start-to-end at its own rate.
+    """
     if camera is None:
         raise ValueError('pyrender backend needs camera intrinsics/extrinsics')
 
-    K = np.asarray(camera['intrinsicMat'], dtype=float)
+    K = np.asarray(camera.intrinsicMat, dtype=float)
     fx, fy, cx, cy = K[0, 0], K[1, 1], K[0, 2], K[1, 2]
-    h, w = (int(round(v)) for v in np.asarray(camera['imageSize'], dtype=float).ravel()[:2])
+    h, w = (int(round(v)) for v in np.asarray(camera.imageSize, dtype=float).ravel()[:2])
 
-    scene = pyrender.Scene(bg_color=[0.05, 0.05, 0.06, 1.0],
-                           ambient_light=[0.2, 0.2, 0.2])
+    # Transparent background when compositing so the model's alpha is clean.
+    bg = [0.0, 0.0, 0.0, 0.0] if background_video else [0.05, 0.05, 0.06, 1.0]
+    scene = pyrender.Scene(bg_color=bg, ambient_light=[0.2, 0.2, 0.2])
     cam_pose = _camera_pose(camera)
     scene.add(pyrender.IntrinsicsCamera(fx=fx, fy=fy, cx=cx, cy=cy,
                                         znear=0.01, zfar=100.0), pose=cam_pose)
@@ -91,18 +111,72 @@ def render_pyrender(mesh_motions, geometry_dir, camera, frames_dir, num_frames):
     nodes = [(scene.add(geom[m.mesh_file]), np.asarray(m.scale, dtype=float),
               m.translation, m.rotation) for m in mesh_motions]
 
+    # Preload the reference video (converted to the render's RGB and size).
+    video_frames = []
+    video_fps = 0.0
+    if background_video:
+        cap = cv2.VideoCapture(background_video)
+        if not cap.isOpened():
+            raise ValueError(f'could not open background video: {background_video}')
+        video_fps = cap.get(cv2.CAP_PROP_FPS)
+        while True:
+            ok, frame = cap.read()
+            if not ok:
+                break
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            if frame.shape[:2] != (h, w):
+                frame = cv2.resize(frame, (w, h))
+            video_frames.append(frame)
+        cap.release()
+        if video_fps <= 0:
+            video_fps = motion_fps  # container lacked fps metadata
+
+    # Absolute motion timeline (shared clock with the video).
+    motion_times = np.asarray(motion_times, dtype=float)
+    t0, t1 = float(motion_times[0]), float(motion_times[-1])
+    motion_fps = (num_frames - 1) / (t1 - t0) if t1 > t0 else 30.0
+
+    # Output runs at the video's fps (real-time) and covers the whole video plus
+    # any motion beyond it; without a video it's just the motion at its own rate.
+    if video_frames:
+        out_fps = video_fps
+        n_out = max(len(video_frames), int(np.ceil(t1 * out_fps)) + 1)
+    else:
+        out_fps = motion_fps
+        n_out = num_frames
+
     os.makedirs(frames_dir, exist_ok=True)
     renderer = pyrender.OffscreenRenderer(viewport_width=w, viewport_height=h)
+    flags = pyrender.RenderFlags.RGBA if video_frames else pyrender.RenderFlags.NONE
     try:
-        for f in range(num_frames):
-            for node, scale, trans, rot in nodes:
-                # world vertex = R (scale * v) + p, in OpenSim world coordinates.
-                M = np.eye(4)
-                M[:3, :3] = _quat_to_mat(rot[f]) @ np.diag(scale)
-                M[:3, 3] = trans[f]
-                scene.set_pose(node, M)
-            color, _ = renderer.render(scene)
-            Image.fromarray(color).save(os.path.join(frames_dir, f'frame_{f + 1:04d}.png'))
+        for i in range(n_out):
+            if video_frames:
+                t = i / out_fps  # wall-clock time (video clock) of this output frame
+                mf = int(round((t - t0) * motion_fps))
+                mf = None if mf < 0 else min(mf, num_frames - 1)  # None = pre-motion
+            else:
+                mf = i
+
+            color = None
+            if mf is not None:
+                for node, scale, trans, rot in nodes:
+                    # world vertex = R (scale * v) + p, in OpenSim world coordinates.
+                    M = np.eye(4)
+                    M[:3, :3] = _quat_to_mat(rot[mf]) @ np.diag(scale)
+                    M[:3, 3] = trans[mf]
+                    scene.set_pose(node, M)
+                color, _ = renderer.render(scene, flags=flags)
+
+            if video_frames:
+                frame = video_frames[min(i, len(video_frames) - 1)]  # hold last frame
+                if mf is None:
+                    out = frame  # before the motion starts: video only
+                else:
+                    a = color[..., 3:4].astype(float) / 255.0 * opacity
+                    out = (a * color[..., :3] + (1 - a) * frame).astype(np.uint8)
+            else:
+                out = color
+            Image.fromarray(out).save(os.path.join(frames_dir, f'frame_{i + 1:04d}.png'))
     finally:
         renderer.delete()
-    return frames_dir
+    return frames_dir, out_fps

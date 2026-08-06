@@ -1,16 +1,13 @@
 import os
-import pickle
 import shutil
 import subprocess
 from dataclasses import dataclass, field
-from typing import Any
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import opensim as osim
 import pyvista as pv
-
-CAMERA_KEYS = ('intrinsicMat', 'rotation', 'translation', 'imageSize')
 
 
 @dataclass
@@ -40,12 +37,6 @@ def load_geometry(mesh_file, geometry_dir):
     return np.asarray(mesh.points, dtype=np.float32), mesh.regular_faces.astype(np.uint32)
 
 
-def load_camera(pickle_path):
-    with open(pickle_path, 'rb') as fh:
-        cal = pickle.load(fh)
-    return {k: np.asarray(cal[k]).tolist() for k in CAMERA_KEYS}
-
-
 def frames_to_video(frames_dir, out_path, fps, pattern='frame_%04d.png', start_number=1):
     """Stitch rendered PNG frames into an mp4 with ffmpeg."""
     ffmpeg = shutil.which('ffmpeg')
@@ -59,3 +50,13 @@ def frames_to_video(frames_dir, out_path, fps, pattern='frame_%04d.png', start_n
         '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '18',
         os.path.abspath(out_path),
     ], check=True)
+
+
+def rm_file_or_folder(path):
+    if not os.path.exists(path):
+        return
+
+    if os.path.isfile(path) or os.path.islink(path):
+        os.remove(path)
+    else:
+        shutil.rmtree(path)
