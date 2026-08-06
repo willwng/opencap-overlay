@@ -11,6 +11,10 @@ dependencies = [
     "pygltflib",
     "pyvista",
     "tqdm",
+    # pyrender backend
+    "pyrender",
+    "trimesh",
+    "pillow",
 ]
 
 [tool.hatch.build.targets.wheel]

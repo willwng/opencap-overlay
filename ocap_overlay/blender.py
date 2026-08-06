@@ -6,7 +6,7 @@ Two roles:
     - find_blender() finds the Blender executable
     - build_blend() bundles the scene (geometry + per-frame poses + camera) to a
       pickle and launches Blender headless to run this script
-  * Executed inside Blender (blender -b -P blender_build.py -- <bundle.pkl>
+  * Executed inside Blender (blender -b -P blender.py -- <bundle.pkl>
     <blend>): builds one object per MeshMotion, bakes per-frame world keyframes
     straight at integer frames, sets up the camera, and saves the .blend.
 """

@@ -3,9 +3,10 @@ from abc import ABC, abstractmethod
 
 import opensim as osim
 
-from .blender_build import build_blend, find_blender, render_blend
-from .mot_to_gltf import build_glb
+from .blender import build_blend, find_blender, render_blend
+from .gltf import build_glb
 from .opensim_helper import process_motion
+from .pyrender_backend import render_pyrender
 from .utils import frames_to_video, load_camera
 
 
@@ -33,6 +34,14 @@ class OpenCapOverlayTool(ABC):
             raise ValueError("No output directory set")
         os.makedirs(self.output_dir, exist_ok=True)
         return
+
+    def _to_video(self, frames_dir, out_path):
+        # Real-time playback: frames per second of the source motion.
+        duration = float(self.times[-1] - self.times[0])
+        fps = round((self.frames - 1) / duration) if duration > 0 else 30
+        print(f'Encoding {frames_dir}/ -> {out_path} at {fps} fps ...')
+        frames_to_video(frames_dir, out_path, fps)
+        return out_path
 
     @abstractmethod
     def render(self, geometry_dir: str):
@@ -64,16 +73,6 @@ class BlenderOverlayTool(OpenCapOverlayTool):
         )
         return blend_path
 
-    def _to_video(self, frames_dir, out_path):
-        # Get FPS from the mot
-        duration = float(self.times[-1] - self.times[0])
-        fps = round((self.frames - 1) / duration) if duration > 0 else 30
-
-        # Convert frames to video
-        print(f'Encoding {frames_dir}/ -> {out_path} at {fps} fps ...')
-        frames_to_video(frames_dir, out_path, fps)
-        return out_path
-
     def render(self, geometry_dir: str):
         # Create blender file
         blend_path = self._build_blend(geometry_dir=geometry_dir)
@@ -83,7 +82,23 @@ class BlenderOverlayTool(OpenCapOverlayTool):
         print(f'Rendering {self.frames} frames of {blend_path} -> {frames_out}/ ...')
         render_blend(blend_path, frames_out, find_blender())
 
-        # Conver to video
+        # Convert to video
         out_path = os.path.join(self.output_dir, "render.mp4")
         self._to_video(frames_out, out_path)
-        return
+        return out_path
+
+
+class PyrenderOverlayTool(OpenCapOverlayTool):
+    def render(self, geometry_dir: str):
+        self._check_output()
+
+        # Render frames in-process straight from the calibrated camera.
+        frames_out = os.path.join(self.output_dir, "frames")
+        print(f'Rendering {self.frames} frames with pyrender -> {frames_out}/ ...')
+        render_pyrender(self.mesh_motions, geometry_dir, self.camera,
+                        frames_out, self.frames)
+
+        # Convert to video
+        out_path = os.path.join(self.output_dir, "render.mp4")
+        self._to_video(frames_out, out_path)
+        return out_path

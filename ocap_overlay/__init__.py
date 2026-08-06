@@ -1,1 +1,1 @@
-from .ocap_overlay import OpenCapOverlayTool, BlenderOverlayTool
+from .ocap_overlay import OpenCapOverlayTool, BlenderOverlayTool, PyrenderOverlayTool
