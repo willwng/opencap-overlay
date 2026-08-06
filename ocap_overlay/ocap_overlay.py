@@ -3,10 +3,10 @@ from abc import ABC, abstractmethod
 
 import opensim as osim
 
-from .blender import build_blend, find_blender, render_blend
-from .gltf import build_glb
+from .backend_blender import build_blend, find_blender, render_blend
+from .backend_gltf import build_glb
 from .opensim_helper import process_motion
-from .pyrender_backend import render_pyrender
+from .backend_pyrender import render_pyrender
 from .utils import frames_to_video, load_camera
 
 
