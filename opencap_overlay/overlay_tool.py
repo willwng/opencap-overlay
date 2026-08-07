@@ -1,11 +1,12 @@
 import os
 from typing import Optional
 
+import numpy as np
 import opensim as osim
 
 from opencap_overlay.utils import rm_file_or_folder
 from .camera import Camera, CheckerboardPlacement
-from .opensim_helper import process_motion
+from .opensim_helper import process_motion, load_trc
 from .render_backend import render_pyrender
 from .utils import frames_to_video
 
@@ -40,6 +41,26 @@ class OpenCapOverlayTool:
             pickle_path=camera_path,
             checkerboard_placement=checkerboard_placement
         )
+
+        # Optional experimental markers (.trc), resampled to the motion frames
+        self.markers = None
+        return
+
+    def add_markers(self, trc_path: str):
+        """
+        Load experimental markers from a .trc.
+        Marker times are resampled (nearest) onto the motion
+        """
+        trc_times, markers, names = load_trc(trc_path)
+        if len(trc_times) > 1:
+            idx = np.clip(np.searchsorted(trc_times, self.times), 1, len(trc_times) - 1)
+            left = idx - 1
+            take_left = np.abs(trc_times[left] - self.times) <= np.abs(trc_times[idx] - self.times)
+            nearest = np.where(take_left, left, idx)
+        else:
+            nearest = np.zeros(self.num_frames, dtype=int)
+        self.markers = markers[nearest]  # (num_frames, N, 3)
+        print(f'Loaded {markers.shape[1]} markers from {trc_path}')
         return
 
     def set_output_dir(self, output_dir: str, clear_output: bool = False):
@@ -84,7 +105,8 @@ class OpenCapOverlayTool:
             num_frames=self.num_frames,
             motion_times=self.times,
             background_video=background_video,
-            opacity=opacity
+            opacity=opacity,
+            markers=self.markers
         )
 
         # Convert to video (at the timeline fps chosen by the renderer)

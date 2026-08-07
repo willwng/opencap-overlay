@@ -76,9 +76,14 @@ def render_pyrender(
         num_frames: int,
         motion_times: np.ndarray,
         background_video: Optional[str] = None,
-        opacity: float = 1.0
+        opacity: float = 1.0,
+        markers: Optional[np.ndarray] = None
 ):
-    """Render the motion to frames_dir/frame_XXXX.png """
+    """Render the motion to frames_dir/frame_XXXX.png.
+
+    markers, if given, is a (num_frames, N, 3) array of experimental marker
+    positions (OpenSim world, metres) rendered as spheres; NaN = occluded.
+    """
 
     # Camera intrinsics
     # ----------
@@ -121,6 +126,17 @@ def render_pyrender(
     # Build a node per each MeshMotion
     # ----------
     nodes = [(scene.add(geom[m.mesh_file]), m.scale, m.translation, m.rotation) for m in mesh_motions]
+
+    # Marker spheres (optional)
+    # ----------
+    marker_nodes = []
+    if markers is not None:
+        sphere = trimesh.creation.uv_sphere(radius=0.02)
+        marker_mat = pyrender.MetallicRoughnessMaterial(
+            baseColorFactor=[0.9, 0.1, 0.1, 1.0], emissiveFactor=[0.5, 0.0, 0.0],
+            metallicFactor=0.0, roughnessFactor=0.5)
+        marker_mesh = pyrender.Mesh.from_trimesh(sphere, material=marker_mat)
+        marker_nodes = [scene.add(marker_mesh) for _ in range(markers.shape[1])]
 
     # Preload the reference video (converted to the render's RGB and size).
     video_frames = []
@@ -177,6 +193,12 @@ def render_pyrender(
                     M[:3, :3] = _quat_to_mat(rot[mf]) @ np.diag(scale)
                     M[:3, 3] = trans[mf]
                     scene.set_pose(node, M)
+                for j, mnode in enumerate(marker_nodes):
+                    p = markers[mf, j]
+                    M = np.eye(4)
+                    # Occluded (NaN) markers get parked far away so they clip out.
+                    M[:3, 3] = 1e4 if np.isnan(p).any() else p
+                    scene.set_pose(mnode, M)
                 color, _ = renderer.render(scene, flags=flags)
 
             # Blend with the video frame if available

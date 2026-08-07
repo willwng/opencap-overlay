@@ -5,6 +5,21 @@ from .motion import MeshMotion
 from .utils import apply_custom_geometry_map
 
 
+def load_trc(path):
+    """ Returns times (T,), positions (T, N, 3) in metres, marker names """
+    with open(path) as fh:
+        lines = fh.read().splitlines()
+    meta = lines[2].split('\t')
+    units = meta[4].strip().lower() if len(meta) > 4 else 'm'
+    names = [n for n in lines[3].split('\t')[2:] if n.strip()]
+    data = np.atleast_2d(np.genfromtxt(lines[5:], delimiter='\t'))
+    times = data[:, 1].astype(float)
+    markers = data[:, 2:2 + 3 * len(names)].reshape(len(data), len(names), 3)
+    if units == 'mm':
+        markers = markers / 1000.0
+    return times, markers, names
+
+
 def process_motion(
         model: osim.Model,
         mot_path: str,

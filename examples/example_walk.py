@@ -5,6 +5,7 @@ from opencap_overlay import OpenCapOverlayTool, CheckerboardPlacement, stack_vid
 def main():
     model_path = "walk/LaiUhlrich2022_scaled.osim"
     mot_path = "walk/walk.mot"
+    markers_path = "walk/walk.trc"
 
     geometry_dir = "Geometry"
     custom_geometry_map = {}
@@ -23,6 +24,7 @@ def main():
             checkerboard_placement=CheckerboardPlacement.GROUND,
             custom_geometry_map=custom_geometry_map
         )
+        overlay_tool.add_markers(markers_path)
         overlay_tool.set_output_dir(f"output/walk/{camera}", clear_output=True)
         render_out = overlay_tool.render(
             geometry_dir=geometry_dir,
