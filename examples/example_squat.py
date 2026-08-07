@@ -1,28 +1,25 @@
-"""
-Example usage of OpenCapOverlay for a squat
-"""
-from opencap_overlay import OpenCapOverlayTool, CheckerboardPlacement
+from opencap_overlay import OpenCapOverlayTool, CheckerboardPlacement, stack_videos_horizontal
 
 
 def main():
     model_path = "squat/LaiUhlrich2022_scaled.osim"
-    mot_path = "squat/squats1.mot"
+    mot_path = "squat/squats-with-arm-raise.mot"
 
     geometry_dir = "Geometry"
     custom_geometry_map = {}
 
     # Loop through all cameras and render the overlay for each
-    cameras = ["cam0", "cam1", "cam2", "cam3", "cam4"]
+    cameras = ["cam0", "cam1"]
     videos_out = []
     for camera in cameras:
         camera_path = f"squat/{camera}/cameraIntrinsicsExtrinsics.pickle"
-        video_path = f"squat/{camera}/squats1.mov"
+        video_path = f"squat/{camera}/squats-with-arm-raise.mov"
 
         overlay_tool = OpenCapOverlayTool(
             model_path=model_path,
             mot_path=mot_path,
             camera_path=camera_path,
-            checkerboard_placement=CheckerboardPlacement.BACK_WALL,
+            checkerboard_placement=CheckerboardPlacement.GROUND,
             custom_geometry_map=custom_geometry_map
         )
         overlay_tool.set_output_dir(f"output/squat/{camera}", clear_output=True)
@@ -32,6 +29,11 @@ def main():
             opacity=0.7,
         )
         videos_out.append(render_out)
+
+    # Stitch the per-camera renders together side by side
+    stitched_video_path = "output/squat/stitched_squat.mp4"
+    stack_videos_horizontal(videos_out, stitched_video_path)
+    print(f"Stitched {len(videos_out)} cameras -> {stitched_video_path}")
     return
 
 
