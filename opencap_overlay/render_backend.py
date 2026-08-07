@@ -14,7 +14,7 @@ from .utils import load_geometry, MeshMotion
 
 
 def _quat_to_mat(q):
-    """3x3 rotation from an xyzw quaternion."""
+    """3x3 rotation from a xyzw quaternion."""
     x, y, z, w = q
     n = x * x + y * y + z * z + w * w
     if n < 1e-12:
@@ -36,8 +36,8 @@ def _camera_pose(camera: Camera):
     expected to already map the model's world to the camera (see
     OpenCapOverlayTool.update_camera), so no extra world rotation is applied.
     """
-    R = np.asarray(camera.rotation, dtype=float)  # world -> cam
-    t = np.asarray(camera.translation, dtype=float).reshape(3) / 1000.0  # mm -> m
+    R = camera.rotation
+    t = camera.translation
     pose = np.eye(4)
     pose[:3, :3] = R.T @ np.diag([1.0, -1.0, -1.0])
     pose[:3, 3] = -R.T @ t
@@ -64,7 +64,7 @@ def render_pyrender(
         camera: Camera,
         frames_dir: str,
         num_frames: int,
-        motion_times,
+        motion_times: np.ndarray,
         background_video: Optional[str] = None,
         opacity: float = 1.0
 ):
@@ -72,9 +72,9 @@ def render_pyrender(
 
     # Camera intrinsics
     # ----------
-    K = np.asarray(camera.intrinsicMat, dtype=float)
+    K = camera.intrinsicMat
     fx, fy, cx, cy = K[0, 0], K[1, 1], K[0, 2], K[1, 2]
-    h, w = (int(round(v)) for v in np.asarray(camera.imageSize, dtype=float).ravel()[:2])
+    h, w = (int(round(v)) for v in camera.imageSize)
 
     # Background: Transparent when overlaying
     # ----------
@@ -110,8 +110,7 @@ def render_pyrender(
 
     # Build a node per each MeshMotion
     # ----------
-    nodes = [(scene.add(geom[m.mesh_file]), np.asarray(m.scale, dtype=float),
-              m.translation, m.rotation) for m in mesh_motions]
+    nodes = [(scene.add(geom[m.mesh_file]), m.scale, m.translation, m.rotation) for m in mesh_motions]
 
     # Preload the reference video (converted to the render's RGB and size).
     video_frames = []
@@ -130,11 +129,8 @@ def render_pyrender(
                 frame = cv2.resize(frame, (w, h))
             video_frames.append(frame)
         cap.release()
-        if video_fps <= 0:
-            video_fps = motion_fps  # container lacked fps metadata
 
     # Motion times/fps
-    motion_times = np.asarray(motion_times, dtype=float)
     t0, t1 = float(motion_times[0]), float(motion_times[-1])
     motion_fps = (num_frames - 1) / (t1 - t0)
 

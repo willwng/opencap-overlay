@@ -47,12 +47,17 @@ def process_motion(
         metas.append(MeshMotion(
             name=m.getName(),
             mesh_file=mesh_file,
-            scale=[sf.get(0), sf.get(1), sf.get(2)],
+            scale=np.array([sf.get(0), sf.get(1), sf.get(2)]),
             frame=m.getFrame(),
+            # These will be updated after processing the motion
+            translation=np.empty(0),
+            rotation=np.empty(0)
         ))
 
     # Traverse through the motion
     times = []
+    translations = {meta: [] for meta in metas}
+    rotations = {meta: [] for meta in metas}
     for r in range(storage.getSize()):
         sv = storage.getStateVector(r)
         data = sv.getData()
@@ -64,10 +69,11 @@ def process_motion(
             X = meta.frame.getTransformInGround(state)
             p = X.p()
             q = X.R().convertRotationToQuaternion()  # w, x, y, z
-            meta.translation.append([p.get(0), p.get(1), p.get(2)])
-            meta.rotation.append([q.get(1), q.get(2), q.get(3), q.get(0)])  # x, y, z, w
+            translations[meta].append([p.get(0), p.get(1), p.get(2)])
+            rotations[meta].append([q.get(1), q.get(2), q.get(3), q.get(0)])  # x, y, z, w
 
+    # Update translations and rotations
     for meta in metas:
-        meta.translation = np.asarray(meta.translation, dtype=np.float32)
-        meta.rotation = np.asarray(meta.rotation, dtype=np.float32)
-    return np.asarray(times, dtype=np.float32), metas
+        meta.translation = np.stack(translations[meta], axis=0)  # (T, 3)
+        meta.rotation = np.stack(rotations[meta], axis=0)  # (T, 4)
+    return np.array(times, dtype=np.float32), metas

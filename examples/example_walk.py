@@ -1,7 +1,5 @@
-"""
-Example usage of OpenCapOverlay for a walk
-"""
-from opencap_overlay import OpenCapOverlayTool, CheckerboardPlacement
+""" Example usage of OpenCapOverlay for a walk """
+from opencap_overlay import OpenCapOverlayTool, CheckerboardPlacement, stack_videos_horizontal
 
 
 def main():
@@ -13,6 +11,7 @@ def main():
 
     # Loop through all cameras and render the overlay for each
     cameras = ["cam0", "cam1"]
+    videos_out = []
     for camera in cameras:
         camera_path = f"walk/{camera}/cameraIntrinsicsExtrinsics.pickle"
         video_path = f"walk/{camera}/walk.mov"
@@ -25,11 +24,17 @@ def main():
             custom_geometry_map=custom_geometry_map
         )
         overlay_tool.set_output_dir(f"output/walk/{camera}", clear_output=True)
-        overlay_tool.render(
+        render_out = overlay_tool.render(
             geometry_dir=geometry_dir,
             background_video=video_path,
             opacity=0.7,
         )
+        videos_out.append(render_out)
+
+    # Stitch the per-camera renders together side by side
+    stitched_video_path = "output/walk/stitched_walk.mp4"
+    stack_videos_horizontal(videos_out, stitched_video_path)
+    print(f"Stitched {len(videos_out)} cameras -> {stitched_video_path}")
     return
 
 

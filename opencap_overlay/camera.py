@@ -12,7 +12,7 @@ class CheckerboardPlacement(Enum):
 
 # OpenCap rotates triangulated keypoints into OpenSim's frame (Y up) by fixed axis
 # rotations set by the checkerboard placement, then runs IK. To project the model
-# back onto video we invert that rotation and fold it into the camera extrinsics,
+# back onto video we invert that rotation and fold it into the camera extrinsics
 _OPENSIM_TO_WORLD = {
     # rotation angles: x 90, y 90
     CheckerboardPlacement.GROUND: np.array([[0, 0, -1], [1, 0, 0], [0, -1, 0]], float),
@@ -23,24 +23,24 @@ _OPENSIM_TO_WORLD = {
 
 @dataclass
 class Camera:
-    intrinsicMat: list
-    rotation: list
-    translation: list
-    imageSize: list
+    intrinsicMat: np.ndarray
+    rotation: np.ndarray
+    translation: np.ndarray
+    imageSize: np.ndarray
 
     @classmethod
     def from_dict(cls, data: dict):
         return cls(
-            intrinsicMat=data['intrinsicMat'],
-            rotation=data['rotation'],
-            translation=data['translation'],
-            imageSize=data['imageSize']
+            intrinsicMat=np.array(data['intrinsicMat']).reshape(3, 3),
+            rotation=np.array(data['rotation']).reshape(3, 3),
+            translation=np.array(data['translation']).ravel() / 1000.0,  # mm -> m
+            imageSize=np.array(data['imageSize']).ravel()
         )
 
     def correct_extrinsics(self, checkerboard_placement: CheckerboardPlacement):
         """Fold the OpenSim-ground -> OpenCap-world rotation into the extrinsics """
         R = _OPENSIM_TO_WORLD[checkerboard_placement]
-        self.rotation = np.asarray(self.rotation, dtype=float) @ R
+        self.rotation = self.rotation @ R
         return
 
     @classmethod

@@ -10,15 +10,15 @@ import opensim as osim
 import pyvista as pv
 
 
-@dataclass
+@dataclass(eq=False)
 class MeshMotion:
     """One mesh and its per-frame world pose over the motion"""
     name: str
     mesh_file: str
-    scale: list
+    scale: np.array
     frame: osim.PhysicalFrame
-    translation: Any = field(default_factory=list)  # (T, 3) (xyz)
-    rotation: Any = field(default_factory=list)  # (T, 4) (xyzw quat)
+    translation: np.ndarray  # (T, 3)
+    rotation: np.ndarray  # (T, 4)
 
 
 def apply_custom_geometry_map(
@@ -50,6 +50,36 @@ def frames_to_video(frames_dir, out_path, fps, pattern='frame_%04d.png', start_n
         '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '18',
         os.path.abspath(out_path),
     ], check=True)
+
+
+def stack_videos_horizontal(video_paths, out_path, height=None):
+    """Stitch videos side by side into one mp4 with ffmpeg (hstack).
+
+    If height is given, each input is scaled to that height first (keeping aspect,
+    width forced even) so mismatched sizes still stack; otherwise the inputs must
+    already share a height. hstack ends at the shortest input.
+    """
+    ffmpeg = shutil.which('ffmpeg')
+    if not ffmpeg:
+        raise ValueError('ffmpeg not found on PATH')
+    if not video_paths:
+        raise ValueError('no videos to stack')
+
+    n = len(video_paths)
+    if height:
+        pre = ''.join(f'[{i}:v]scale=-2:{height}[v{i}];' for i in range(n))
+        labels = ''.join(f'[v{i}]' for i in range(n))
+    else:
+        pre = ''
+        labels = ''.join(f'[{i}:v]' for i in range(n))
+
+    cmd = [ffmpeg, '-y']
+    for v in video_paths:
+        cmd += ['-i', os.path.abspath(v)]
+    cmd += ['-filter_complex', f'{pre}{labels}hstack=inputs={n}',
+            '-c:v', 'libx264', '-pix_fmt', 'yuv420p', os.path.abspath(out_path)]
+    subprocess.run(cmd, check=True)
+    return out_path
 
 
 def rm_file_or_folder(path):
