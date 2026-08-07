@@ -60,3 +60,10 @@ def rm_file_or_folder(path):
         os.remove(path)
     else:
         shutil.rmtree(path)
+
+
+def as_rotation(R):
+    R = np.array(R, dtype=float)
+    if abs(np.linalg.det(R) - 1.0) < 1e-4:
+        return R
+    raise ValueError(f"Invalid rotation matrix with det={np.linalg.det(R)}:\n{R}")

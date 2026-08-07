@@ -1,0 +1,14 @@
+R_fromMocap_toVideo:
+- - 0
+  - 0
+  - -1
+- - 1
+  - 0
+  - 0
+- - 0
+  - -1
+  - 0
+position_fromMocapOrigin_toVideoOrigin:
+- -0.9855995438246671
+- 0.3957280375583634
+- -0.2923147576477491

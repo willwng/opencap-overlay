@@ -2,11 +2,11 @@ import os
 from typing import Optional
 
 import opensim as osim
-from opencap_overlay.utils import rm_file_or_folder
 
+from opencap_overlay.utils import rm_file_or_folder
+from .camera import Camera, CheckerboardPlacement
 from .opensim_helper import process_motion
-from .backend_pyrender import render_pyrender
-from .camera import Camera
+from .render_backend import render_pyrender
 from .utils import frames_to_video
 
 
@@ -15,7 +15,8 @@ class OpenCapOverlayTool:
             self,
             model_path: str,
             mot_path: str,
-            camera_path: Optional[str] = None,
+            camera_path: str,
+            checkerboard_placement: CheckerboardPlacement,
             custom_geometry_map: Optional[dict] = None
     ):
         self.model_path = model_path
@@ -28,13 +29,17 @@ class OpenCapOverlayTool:
         self.times, self.mesh_motions = process_motion(
             model, self.mot_path, self.custom_geometry_map
         )
+
+        # FPS of motion
         self.num_frames = len(self.times)
-        duration = float(self.times[-1] - self.times[0])
-        self.motion_fps = (self.num_frames - 1) / duration if duration > 0 else 30.0
+        self.motion_fps = (self.num_frames - 1) / float(self.times[-1] - self.times[0])
         print(f'Processed {self.num_frames} frames, {len(self.mesh_motions)} meshes')
 
         # Prepare the camera intrinsics/extrinsics
-        self.camera = Camera.from_pickle(camera_path) if camera_path else None
+        self.camera = Camera.from_pickle(
+            pickle_path=camera_path,
+            checkerboard_placement=checkerboard_placement
+        )
         return
 
     def set_output_dir(self, output_dir: str, clear_output: bool = False):
@@ -52,8 +57,7 @@ class OpenCapOverlayTool:
         return
 
     def _to_video(self, frames_dir, out_path, fps=None):
-        # Default to real-time playback of the motion; callers that resampled onto
-        # another timeline (e.g. a video's fps) pass the fps to encode at.
+        """ Convert rendered frames to a video at the specified fps """
         if fps is None:
             fps = self.motion_fps
         print(f'Encoding {frames_dir}/ -> {out_path} at {fps:g} fps ...')
@@ -65,15 +69,14 @@ class OpenCapOverlayTool:
             geometry_dir: str,
             background_video: Optional[str] = None,
             opacity: float = 1.0
-    ):
+    ) -> str:
+        """
+        Render the motion to a video with optional background video and opacity
+        Returns the path to the output video file.
+        """
         self._check_output()
-
-        # Render frames in-process straight from the calibrated camera, optionally
-        # compositing on top of a reference video from the same camera.
         frames_out = os.path.join(self.output_dir, "frames")
-        msg = f' over {background_video}' if background_video else ''
-        print(f'Rendering {self.num_frames} frames with pyrender{msg} -> {frames_out}/ ...')
-        frames_out, out_fps = render_pyrender(
+        out_fps = render_pyrender(
             mesh_motions=self.mesh_motions,
             geometry_dir=geometry_dir,
             camera=self.camera,
