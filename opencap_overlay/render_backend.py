@@ -8,9 +8,19 @@ import pyrender
 import trimesh
 from tqdm import tqdm
 from PIL import Image
+from contextlib import contextmanager
 
 from .camera import Camera
-from .utils import load_geometry, MeshMotion
+from .motion import MeshMotion
+from .utils import load_geometry
+
+
+@contextmanager
+def managed_renderer(renderer):
+    try:
+        yield renderer
+    finally:
+        renderer.delete()
 
 
 def _quat_to_mat(q):
@@ -148,15 +158,17 @@ def render_pyrender(
     os.makedirs(frames_dir, exist_ok=True)
     renderer = pyrender.OffscreenRenderer(viewport_width=w, viewport_height=h)
     flags = pyrender.RenderFlags.RGBA if video_frames else pyrender.RenderFlags.NONE
-    try:
+    with managed_renderer(renderer):
         for i in tqdm(range(n_out), desc='Rendering frames', unit='frame'):
+            # Determine which frame of motion to use
             if video_frames:
-                t = i / out_fps  # wall-clock time (video clock) of this output frame
+                t = i / out_fps  # wall-clock time of this frame
                 mf = int(round((t - t0) * motion_fps))
-                mf = None if mf < 0 else min(mf, num_frames - 1)  # None = pre-motion
+                mf = None if mf < 0 else min(mf, num_frames - 1)  # None = IK didn't start yet
             else:
                 mf = i
 
+            # Render the scene with the meshes at their current pose
             color = None
             if mf is not None:
                 for node, scale, trans, rot in nodes:
@@ -167,6 +179,7 @@ def render_pyrender(
                     scene.set_pose(node, M)
                 color, _ = renderer.render(scene, flags=flags)
 
+            # Blend with the video frame if available
             if video_frames:
                 frame = video_frames[min(i, len(video_frames) - 1)]  # hold last frame
                 if mf is None:
@@ -177,6 +190,4 @@ def render_pyrender(
             else:
                 out = color
             Image.fromarray(out).save(os.path.join(frames_dir, f'frame_{i + 1:04d}.png'))
-    finally:
-        renderer.delete()
     return out_fps

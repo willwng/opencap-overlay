@@ -1,7 +1,8 @@
 import opensim as osim
 import numpy as np
 
-from .utils import MeshMotion, apply_custom_geometry_map
+from .motion import MeshMotion
+from .utils import apply_custom_geometry_map
 
 
 def process_motion(
