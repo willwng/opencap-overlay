@@ -63,6 +63,16 @@ class OpenCapOverlayTool:
         print(f'Loaded {markers.shape[1]} markers from {trc_path}')
         return
 
+    def apply_camera_offset(self, offset: np.ndarray | list | tuple):
+        """
+        Apply a translation offset to the camera extrinsics.
+        offset: (3,) array in OpenSim world coordinates (m)
+        """
+        if not isinstance(offset, np.ndarray):
+            offset = np.asarray(offset, dtype=float)
+        self.camera.translation += offset
+        return
+
     def set_output_dir(self, output_dir: str, clear_output: bool = False):
         self.output_dir = output_dir
         if clear_output and os.path.exists(self.output_dir):
