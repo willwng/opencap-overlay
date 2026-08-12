@@ -180,7 +180,7 @@ def render_pyrender(
             if video_frames:
                 t = i / out_fps  # wall-clock time of this frame
                 mf = int(round((t - t0) * motion_fps))
-                mf = None if mf < 0 else min(mf, num_frames - 1)  # None = IK didn't start yet
+                mf = None if (mf < 0 or mf >= num_frames) else min(mf, num_frames - 1)  # None = IK not captured
             else:
                 mf = i
 
