@@ -1,18 +1,18 @@
 """ pyrender backend """
 import os
+from contextlib import contextmanager
 from typing import Optional
 
-import numpy as np
 import cv2
+import numpy as np
 import pyrender
 import trimesh
-from tqdm import tqdm
 from PIL import Image
-from contextlib import contextmanager
+from tqdm import tqdm
 
 from .camera import Camera
 from .motion import MeshMotion
-from .utils import load_geometry
+from .utils import load_geometry, get_video_times
 
 
 @contextmanager
@@ -79,11 +79,7 @@ def render_pyrender(
         opacity: float = 1.0,
         markers: Optional[np.ndarray] = None
 ):
-    """Render the motion to frames_dir/frame_XXXX.png.
-
-    markers, if given, is a (num_frames, N, 3) array of experimental marker
-    positions (OpenSim world, metres) rendered as spheres; NaN = occluded.
-    """
+    """Render the motion to frames_dir/frame_XXXX.png. """
 
     # Camera intrinsics
     # ----------
@@ -138,14 +134,17 @@ def render_pyrender(
         marker_mesh = pyrender.Mesh.from_trimesh(sphere, material=marker_mat)
         marker_nodes = [scene.add(marker_mesh) for _ in range(markers.shape[1])]
 
-    # Preload the reference video (converted to the render's RGB and size).
+    # Preload reference video and get actual per-frame timestamps
+    # ----------
     video_frames = []
-    video_fps = 0.0
+    video_times = np.array([], dtype=float)
     if background_video:
+        video_times = get_video_times(background_video)
         cap = cv2.VideoCapture(background_video)
         if not cap.isOpened():
             raise ValueError(f'could not open background video: {background_video}')
-        video_fps = cap.get(cv2.CAP_PROP_FPS)
+
+        # Reshape and convert video frames
         while True:
             ok, frame = cap.read()
             if not ok:
@@ -156,31 +155,35 @@ def render_pyrender(
             video_frames.append(frame)
         cap.release()
 
-    # Motion times/fps
-    t0, t1 = float(motion_times[0]), float(motion_times[-1])
-    motion_fps = (num_frames - 1) / (t1 - t0)
-
-    # Output runs at the video's fps (real-time) and covers the whole video plus
-    # any motion beyond it; without a video it's just the motion at its own rate.
-    if video_frames:
-        out_fps = video_fps
-        n_out = max(len(video_frames), int(np.ceil(t1 * out_fps)) + 1)
-    else:
-        out_fps = motion_fps
-        n_out = num_frames
+    # Motion timestamps (prefer the video timestamps if available)
+    # ----------
+    motion_times = np.asarray(motion_times, dtype=float)
+    output_times = video_times if video_frames else motion_times
 
     # Start Render
     # ----------
     os.makedirs(frames_dir, exist_ok=True)
     renderer = pyrender.OffscreenRenderer(viewport_width=w, viewport_height=h)
     flags = pyrender.RenderFlags.RGBA if video_frames else pyrender.RenderFlags.NONE
+
     with managed_renderer(renderer):
-        for i in tqdm(range(n_out), desc='Rendering frames', unit='frame'):
-            # Determine which frame of motion to use
+        for i, t in enumerate(tqdm(output_times, desc="Rendering frames", unit="frame")):
+            # Find the motion frame corresponding to this timestamp
             if video_frames:
-                t = i / out_fps  # wall-clock time of this frame
-                mf = int(round((t - t0) * motion_fps))
-                mf = None if (mf < 0 or mf >= num_frames) else min(mf, num_frames - 1)  # None = IK not captured
+                mf = np.searchsorted(motion_times, t)
+
+                if mf == 0:  # Possibly before the first motion frame
+                    mf = None if t < motion_times[0] else 0
+                elif mf >= num_frames:  # After the last motion frame
+                    mf = None
+                else:
+                    # Choose whichever neighboring motion frame is closer
+                    before = mf - 1
+                    after = mf
+                    if abs(motion_times[before] - t) <= abs(motion_times[after] - t):
+                        mf = before
+                    else:
+                        mf = after
             else:
                 mf = i
 
@@ -199,17 +202,25 @@ def render_pyrender(
                     # Occluded (NaN) markers get parked far away so they clip out.
                     M[:3, 3] = 1e4 if np.isnan(p).any() else p
                     scene.set_pose(mnode, M)
-                color, _ = renderer.render(scene, flags=flags)
 
-            # Blend with the video frame if available
+                color, _ = renderer.render(
+                    scene,
+                    flags=flags,
+                )
+
+            # Blend with video frame if available
             if video_frames:
-                frame = video_frames[min(i, len(video_frames) - 1)]  # hold last frame
+                frame = video_frames[i]
                 if mf is None:
-                    out = frame  # before the motion starts: video only
+                    # Video only before/after motion.
+                    out = frame
                 else:
                     a = color[..., 3:4].astype(float) / 255.0 * opacity
                     out = (a * color[..., :3] + (1 - a) * frame).astype(np.uint8)
             else:
                 out = color
             Image.fromarray(out).save(os.path.join(frames_dir, f'frame_{i + 1:04d}.png'))
+
+    # effective average frame rate
+    out_fps = (len(output_times) - 1) / (output_times[-1] - output_times[0])
     return out_fps

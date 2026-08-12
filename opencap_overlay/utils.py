@@ -1,3 +1,4 @@
+import json
 import os
 import shutil
 import subprocess
@@ -56,6 +57,30 @@ def stack_videos_horizontal(video_paths, out_path):
             '-c:v', 'libx264', '-pix_fmt', 'yuv420p', os.path.abspath(out_path)]
     subprocess.run(cmd, check=True)
     return out_path
+
+
+def get_video_times(video_path: str):
+    result = subprocess.run(
+        [
+            "ffprobe",
+            "-v", "error",
+            "-select_streams", "v:0",
+            "-show_frames",
+            "-show_entries", "frame=best_effort_timestamp_time",
+            "-of", "json",
+            video_path,
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    probe = json.loads(result.stdout)
+
+    video_times = np.array(
+        [float(frame["best_effort_timestamp_time"]) for frame in probe["frames"] if
+         "best_effort_timestamp_time" in frame], dtype=float,
+    )
+    return video_times
 
 
 def rm_file_or_folder(path):
