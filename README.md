@@ -8,12 +8,30 @@ to video-based data sources.
 </div>
 
 ## Install OpenCap Overlay
-    cd opencap-overlay
-    pip install -e .
+First, OpenSim is required to be present. We recommend using conda to ensure OpenSim is installed. 
+An example of creating a new environment with OpenSim:
+```bash
+conda create -n ENV_NAME python=3.11
+conda activate ENV_NAME
+conda install opensim-org::opensim
+```
+
+Then, the `opencap_overlay` package can be installed
+```bash
+cd opencap-overlay
+pip install -e .
+```
+
+### Additional Dependencies
+The overlay tool relies on the following command line tools (these are typically already be installed or easy to install)
+- ffmpeg
+- ffprobe
 
 ## Example usage
-See the `examples` folder for example usage of the OpenCap Overlay library.
 
 We provide examples based on the paired 
 IK + Video data from [OpenCap](https://simtk.org/projects/opencap) and from
 [opencap-test-data](https://github.com/stanfordnmbl/opencap-test-data/tree/main)
+
+See the [examples](examples) folder for example usage of the OpenCap Overlay library.
+
