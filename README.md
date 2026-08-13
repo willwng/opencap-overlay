@@ -24,7 +24,7 @@ pip install -e .
 ```
 
 ### Additional Dependencies
-The overlay tool relies on the following command line tools (these are typically already be installed or easy to install)
+The overlay tool relies on the following command line tools (these are typically already installed or easy to install)
 - ffmpeg
 - ffprobe
 
