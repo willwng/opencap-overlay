@@ -8,14 +8,12 @@ version = "0.1.0"
 requires-python = ">=3.9"
 dependencies = [
     "numpy",
-    "pygltflib",
-    "pyvista",
-    "pyyaml",
-    "tqdm",
-    # pyrender backend
-    "pyrender",
-    "trimesh",
+    "opencv-python",
     "pillow",
+    "pyrender",
+    "pyvista",
+    "tqdm",
+    "trimesh",
 ]
 
 [tool.hatch.build.targets.wheel]
