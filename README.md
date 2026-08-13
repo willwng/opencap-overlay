@@ -3,6 +3,10 @@
 A Python library for overlaying/validating inverse kinematics results
 to video-based data sources.
 
+<div float="center">
+  <img src="assets/walk_stitched.gif" width="700"/>
+</div>
+
 ## Install OpenCap Overlay
     cd opencap-overlay
     pip install -e .
