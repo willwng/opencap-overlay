@@ -17,6 +17,16 @@ def main():
     geometry_dir = "sprint/Geometry"
     custom_geometry_map = {}  # not needed: model bones + custom STLs all located in sprint/Geometry/
 
+    # DISPLAY-ONLY vertical correction (does NOT touch the model / .mot / scaling).
+    # The model reprojects ~7 px (~8 cm) high vs the HRNet detections consistently
+    # across the well-matched joints (elbows/wrists/knees/ankle), i.e. a small
+    # systematic transform residual. This per-camera offset (= an 8.4 cm world-down
+    # shift, expressed in each camera's frame) zeroes that; it only moves the camera.
+    camera_offsets = {
+        "cam0": [-0.0022, 0.0839, -0.0088],
+        "cam1": [0.0006, 0.0843, -0.0045],
+    }
+
     cameras = ["cam0", "cam1"]
     videos_out = []
     for camera in cameras:
@@ -34,6 +44,7 @@ def main():
             checkerboard_placement=CheckerboardPlacement.GROUND,
             custom_geometry_map=custom_geometry_map,
         )
+        overlay_tool.apply_camera_offset(camera_offsets[camera])  # display-only vertical fix
         overlay_tool.add_markers(markers_path)  # optional
         overlay_tool.set_output_dir(f"output/sprint/{camera}", clear_output=True)
         render_out = overlay_tool.render(
