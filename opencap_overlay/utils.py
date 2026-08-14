@@ -44,8 +44,7 @@ def frames_to_video(frames_dir, out_path, fps, pattern='frame_%04d.png', start_n
     ], check=True)
 
 
-def stack_videos_horizontal(video_paths, out_path):
-    """Stitch videos side by side into one mp4"""
+def stack_videos(video_paths, out_path, stack_type: str):
     ffmpeg = find_ffmpeg()
 
     n = len(video_paths)
@@ -53,10 +52,20 @@ def stack_videos_horizontal(video_paths, out_path):
     cmd = [ffmpeg, '-y']
     for v in video_paths:
         cmd += ['-i', os.path.abspath(v)]
-    cmd += ['-filter_complex', f'{labels}hstack=inputs={n}',
+    cmd += ['-filter_complex', f'{labels}{stack_type}=inputs={n}',
             '-c:v', 'libx264', '-pix_fmt', 'yuv420p', os.path.abspath(out_path)]
     subprocess.run(cmd, check=True)
     return out_path
+
+
+def stack_videos_horizontal(video_paths, out_path):
+    """Stitch videos side by side into one mp4"""
+    return stack_videos(video_paths, out_path, 'hstack')
+
+
+def stack_videos_vertical(video_paths, out_path):
+    """Stitch videos top to bottom into one mp4"""
+    return stack_videos(video_paths, out_path, 'vstack')
 
 
 def get_video_times(video_path: str):
